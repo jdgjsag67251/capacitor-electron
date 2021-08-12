@@ -4,6 +4,8 @@ import { exec } from "child_process";
 import { createHash } from "crypto";
 const chalk = require("chalk");
 
+const debug = !!Object.keys(process.env).find(key => key.toLowerCase() === 'electron_cli_debug');
+
 const enum PluginType {
   Core,
   Cordova,
@@ -56,13 +58,18 @@ export function readJSON(pathToUse: string): { [key: string]: any } {
 
 export function runExec(command: string) {
   return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
+    const childProcess = exec(command, (error, stdout, stderr) => {
       if (error) {
         reject(stdout + stderr);
       } else {
         resolve(stdout);
       }
     });
+
+    if (debug) {
+      childProcess.stdout?.pipe(process.stdout);
+      childProcess.stderr?.pipe(process.stderr);
+    }
   });
 }
 
@@ -175,7 +182,12 @@ export async function runTask<T>(
 ) {
   const ora = require("ora");
   const chalk = require("chalk");
-  const spinner = ora(title).start();
+  const spinner = ora(title);
+
+  if (!debug) {
+    spinner.start();
+  }
+
   try {
     const start = process.hrtime();
     let taskInfoMessage;
