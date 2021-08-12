@@ -171,55 +171,65 @@ for (const pluginKey of Object.keys(plugins)) {
   for (const classKey of Object.keys(plugins[pluginKey]).filter(
     (className) => className !== "default"
   )) {
-    const functionList = Object.getOwnPropertyNames(
-      plugins[pluginKey][classKey].prototype
-    ).filter((v) => v !== "constructor");
-    if (!pluginsRegistry[classKey]) {
-      pluginInstanceRegistry[classKey] = new plugins[pluginKey][classKey]();
-      pluginsRegistry[classKey] = {};
-    }
-    for (const functionName of functionList) {
-      if (!pluginsRegistry[classKey][functionName]) {
-        const pluginRef = pluginInstanceRegistry[classKey];
-        const isPromise =
-          pluginRef[functionName] instanceof Promise ||
-          pluginRef[functionName] instanceof AsyncFunction;
-        if (isPromise) {
-          pluginsRegistry[classKey][functionName] = (...sendArgs: any) => {
-            const id = getRandomId();
-            return new Promise((resolve, _reject) => {
-              console.log(
-                `sending async ipc from renderer of channel: ${classKey}-${functionName}`
-              );
-              const listener = (
-                _event: any,
-                returnedId: string,
-                returnedValue: unknown
-              ) => {
-                if (returnedId === id) {
-                  console.log("got reply of:", returnedValue);
-                  ipcRenderer.removeListener(
-                    `${classKey}-${functionName}-reply`,
-                    listener
-                  );
-                  resolve(returnedValue);
-                }
-              };
-              ipcRenderer.on(`${classKey}-${functionName}-reply`, listener);
-              ipcRenderer.send(`${classKey}-${functionName}`, id, ...sendArgs);
-            });
-          };
-        } else {
-          pluginsRegistry[classKey][functionName] = (...sendArgs: any) => {
+    const classInstance = plugins[pluginKey][classKey];
+
+    const functionHandler = (functionName, func) => {
+      const isPromise =
+        func instanceof Promise ||
+        func instanceof AsyncFunction;
+
+      if (isPromise) {
+        return (...sendArgs: any) => {
+          const id = getRandomId();
+          return new Promise((resolve, _reject) => {
             console.log(
-              `sending sync ipc from renderer of channel: ${classKey}-${functionName}`
+              `sending async ipc from renderer of channel: ${classKey}-${functionName}`
             );
-            return ipcRenderer.sendSync(
-              `${classKey}-${functionName}`,
-              "",
-              ...sendArgs
-            );
-          };
+            const listener = (
+              _event: any,
+              returnedId: string,
+              returnedValue: unknown
+            ) => {
+              if (returnedId === id) {
+                console.log("got reply of:", returnedValue);
+                ipcRenderer.removeListener(
+                  `${classKey}-${functionName}-reply`,
+                  listener
+                );
+                resolve(returnedValue);
+              }
+            };
+            ipcRenderer.on(`${classKey}-${functionName}-reply`, listener);
+            ipcRenderer.send(`${classKey}-${functionName}`, id, ...sendArgs);
+          });
+        };
+      } else {
+        return (...sendArgs: any) => {
+          console.log(
+            `sending sync ipc from renderer of channel: ${classKey}-${functionName}`
+          );
+          return ipcRenderer.sendSync(
+            `${classKey}-${functionName}`,
+            "",
+            ...sendArgs
+          );
+        };
+      }
+    }
+
+    if (!classInstance.prototype && classInstance instanceof Function) {
+      pluginsRegistry[classKey] = functionHandler(classKey, pluginInstanceRegistry[classKey]);
+    } else {
+      const functionList = Object.getOwnPropertyNames(plugins[pluginKey][classKey].prototype).filter((v) => v !== "constructor");
+
+      if (!pluginsRegistry[classKey]) {
+        pluginInstanceRegistry[classKey] = new plugins[pluginKey][classKey]();
+        pluginsRegistry[classKey] = {};
+      }
+
+      for (const functionName of functionList) {
+        if (!pluginsRegistry[classKey][functionName]) {
+          pluginsRegistry[classKey][functionName] = functionHandler(functionName, pluginInstanceRegistry[classKey][functionName]);
         }
       }
     }
