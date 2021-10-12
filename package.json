@@ -11,9 +11,11 @@
     "postinstall": "lerna bootstrap",
     "lerna": "lerna"
   },
+  "dependencies": {
+    "lerna": "~4.0.0"
+  },
   "devDependencies": {
     "env-cmd": "~10.1.0",
-    "lerna": "~4.0.0",
     "shx": "~0.3.3"
   }
 }
