@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { existsSync, writeFileSync } from 'fs';
-import { copySync } from 'fs-extra';
-import { join, isAbsolute, resolve, relative } from 'path';
+import {existsSync, writeFileSync} from 'fs';
+import {copySync} from 'fs-extra';
+import {join, isAbsolute, resolve, relative} from 'path';
 
-import type { TaskInfoProvider } from './common';
-import { getPlugins, readJSON, resolvePlugin, resolveElectronPlugin, runExec } from './common';
+import type {TaskInfoProvider} from './common';
+import {getPlugins, readJSON, resolvePlugin, resolveElectronPlugin, runExec} from './common';
 
 export async function doUpdate(taskInfoMessageProvider: TaskInfoProvider): Promise<void> {
   const usersProjectDir = process.env.CAPACITOR_ROOT_DIR;
@@ -48,7 +48,7 @@ export async function doUpdate(taskInfoMessageProvider: TaskInfoProvider): Promi
       const path = resolveElectronPlugin(plugin);
       const name = plugin?.name;
       const id = plugin?.id;
-      return { name, path, installStr, id };
+      return {name, path, installStr, id};
     })
     .filter((plugin) => plugin.path !== null);
 
@@ -60,19 +60,19 @@ export async function doUpdate(taskInfoMessageProvider: TaskInfoProvider): Promi
 
   taskInfoMessageProvider('generating electron-plugins.js');
 
+  const capacitorElectronRuntimeFilePath = join(usersProjectDir, 'electron', 'src', 'rt');
+
   let outStr = `/* eslint-disable @typescript-eslint/no-var-requires */\n`;
   for (const electronPlugin of pluginMap) {
     npmIStr += ` ${electronPlugin.installStr}`;
-    const tmpPath = join(usersProjectDir, 'electron', 'node_modules', electronPlugin.id, 'electron', 'dist/plugin.js');
-    outStr += `const ${electronPlugin.name} = require('${tmpPath.replace(/\\/g, '\\\\')}')\n`;
+    const tmpPath = join(relative(capacitorElectronRuntimeFilePath, usersProjectDir), 'node_modules', electronPlugin.id, 'electron', 'dist/plugin.js');
+    outStr += `const ${electronPlugin.name} = require('${tmpPath.replace(/\\/g, '\\\\')}');\n`;
   }
   outStr += '\nmodule.exports = {\n';
   for (const electronPlugin of pluginMap) {
     outStr += `  ${electronPlugin.name},\n`;
   }
   outStr += '}';
-
-  const capacitorElectronRuntimeFilePath = join(usersProjectDir, 'electron', 'src', 'rt');
 
   writeFileSync(join(capacitorElectronRuntimeFilePath, 'electron-plugins.js'), outStr, { encoding: 'utf-8' });
 
