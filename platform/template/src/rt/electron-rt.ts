@@ -1,6 +1,6 @@
-import { randomBytes } from 'crypto';
-import { ipcRenderer, contextBridge } from 'electron';
-import { EventEmitter } from 'events';
+import {randomBytes} from 'crypto';
+import {ipcRenderer, contextBridge} from 'electron';
+import {EventEmitter} from 'events';
 
 ////////////////////////////////////////////////////////
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -9,7 +9,7 @@ const plugins = require('./electron-plugins');
 const randomId = (length = 5) => randomBytes(length).toString('hex');
 
 const contextApi: {
-  [plugin: string]: { [functionName: string]: () => Promise<any> };
+  [plugin: string]: {[functionName: string]: () => Promise<any>};
 } = {};
 
 Object.keys(plugins).forEach((pluginKey) => {
@@ -32,7 +32,7 @@ Object.keys(plugins).forEach((pluginKey) => {
 
       // Events
       if (plugins[pluginKey][classKey].prototype instanceof EventEmitter) {
-        const listeners: { [key: string]: { type: string; listener: (...args: any[]) => void } } = {};
+        const listeners: {[key: string]: {type: string; listener: (...args: any[]) => void}} = {};
         const listenersOfTypeExist = (type) =>
           !!Object.values(listeners).find((listenerObj) => listenerObj.type === type);
 
@@ -40,6 +40,7 @@ Object.keys(plugins).forEach((pluginKey) => {
           addListener(type: string, callback: (...args) => void) {
             const id = randomId();
 
+            // Deduplicate events
             if (!listenersOfTypeExist(type)) {
               ipcRenderer.send(`event-add-${classKey}`, type);
             }
@@ -47,7 +48,7 @@ Object.keys(plugins).forEach((pluginKey) => {
             const eventHandler = (_, ...args) => callback(...args);
 
             ipcRenderer.addListener(`event-${classKey}-${type}`, eventHandler);
-            listeners[id] = { type, listener: eventHandler };
+            listeners[id] = {type, listener: eventHandler};
 
             return id;
           },
@@ -56,14 +57,14 @@ Object.keys(plugins).forEach((pluginKey) => {
               throw new Error('Invalid id');
             }
 
-            const { type, listener } = listeners[id];
+            const {type, listener} = listeners[id];
 
             ipcRenderer.removeListener(`event-${classKey}-${type}`, listener);
 
             delete listeners[id];
 
             if (!listenersOfTypeExist(type)) {
-              ipcRenderer.send(`event-remove-${classKey}`, type);
+              ipcRenderer.send(`event-remove-${classKey}-${type}`);
             }
           },
           removeAllListeners(type: string) {
@@ -74,8 +75,8 @@ Object.keys(plugins).forEach((pluginKey) => {
               }
             });
 
-            ipcRenderer.send(`event-remove-${classKey}`, type);
-          },
+            ipcRenderer.send(`event-remove-${classKey}-${type}`);
+          }
         });
       }
     });
