@@ -4,6 +4,12 @@
   "description": "Capacitor community support for the Electron platform!",
   "main": "dist/core/index.js",
   "typings": "dist/core/index.d.ts",
+  "files": [
+    "./dist",
+    "template.tar.gz",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "lint": "pnpm eslint . --ext ts && pnpm prettier \"./**/*.{css,html,ts,js,java}\" --check",
     "fmt": "pnpm eslint . --ext ts --fix && pnpm prettier \"./**/*.{css,html,ts,js,java}\" --write",
