@@ -1,11 +1,9 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
-/* eslint-disable @typescript-eslint/prefer-for-of */
-import { AsyncLocalStorage } from 'async_hooks';
 import { app, ipcMain } from 'electron';
-import EventEmitter from 'events';
-import { existsSync, readFileSync } from 'fs';
 import mimeTypes from 'mime-types';
-import { join } from 'path';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import EventEmitter from 'node:events';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { CallContext, CapacitorElectronConfig } from './definitions';
 
@@ -15,7 +13,7 @@ let config: CapacitorElectronConfig = {};
 export const CapElectronEventEmitter = new CapElectronEmitter();
 
 export function deepMerge(target: any, _objects: any[] = []): any {
-  // Credit for origanal function: Josh Cole(saikojosh)[https://github.com/saikojosh]
+  // Credit for original function: Josh Cole(saikojosh)[https://github.com/saikojosh]
   const quickCloneArray = function (input: any) {
     return input.map(cloneValue);
   };
@@ -43,9 +41,11 @@ export function deepMerge(target: any, _objects: any[] = []): any {
   };
   const objects = _objects.map((object) => object || {});
   const output = target || {};
+  // eslint-disable-next-line @typescript-eslint/prefer-for-of
   for (let oindex = 0; oindex < objects.length; oindex++) {
     const object = objects[oindex];
     const keys = Object.keys(object);
+    // eslint-disable-next-line @typescript-eslint/prefer-for-of
     for (let kindex = 0; kindex < keys.length; kindex++) {
       const key = keys[kindex];
       const value = object[key];
@@ -86,6 +86,7 @@ export function deepClone<T>(object: Record<string, T>): Record<string, T> {
 }
 
 const pluginInstanceRegistry: { [pluginClassName: string]: { [functionName: string]: any } } = {};
+const activeEventRegistry = new Map<string, () => void>();
 
 export function setupCapacitorElectronPlugins(): void {
   const callerStorage = new AsyncLocalStorage();
@@ -98,9 +99,9 @@ export function setupCapacitorElectronPlugins(): void {
 
   console.log('in setupCapacitorElectronPlugins');
   const rtPluginsPath = join(app.getAppPath(), 'build', 'src', 'rt', 'electron-plugins.js');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const plugins: {
     [pluginName: string]: { [className: string]: any };
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
   } = require(rtPluginsPath);
 
   console.log(plugins);
@@ -110,9 +111,12 @@ export function setupCapacitorElectronPlugins(): void {
       console.log(`-> ${classKey}`);
 
       if (!pluginInstanceRegistry[classKey]) {
-        pluginInstanceRegistry[classKey] = new plugins[pluginKey][classKey](deepClone(config as Record<string, any>), {
-          caller,
-        });
+        pluginInstanceRegistry[classKey] = new plugins[pluginKey][classKey](
+          deepClone(config as Record<string, unknown>),
+          {
+            caller,
+          }
+        );
       }
 
       const functionList = Object.getOwnPropertyNames(plugins[pluginKey][classKey].prototype).filter(
@@ -138,18 +142,34 @@ export function setupCapacitorElectronPlugins(): void {
       }
 
       // For every Plugin which extends EventEmitter, start listening for 'event-add-{classKey}'
-      if (pluginInstanceRegistry[classKey] instanceof EventEmitter) {
-        // Listen for calls about adding event listeners (types) to this particular class
-        // This is only called by renderer when the first addListener of a particular type is requested
-        ipcMain.on(`event-add-${classKey}`, (event, type) => {
-          const eventHandler = (...data: any[]) => event.sender.send(`event-${classKey}-${type}`, ...data);
+      {
+        const registryInstance = pluginInstanceRegistry[classKey];
 
-          (pluginInstanceRegistry[classKey] as EventEmitter).addListener(type, eventHandler);
+        if (registryInstance instanceof EventEmitter) {
+          ipcMain.on(`event-add-${classKey}`, (event, type) => {
+            const eventKey = `event-${classKey}-${type}`;
 
-          ipcMain.once(`event-remove-${classKey}-${type}`, () => {
-            (pluginInstanceRegistry[classKey] as EventEmitter).removeListener(type, eventHandler);
+            if (activeEventRegistry.has(eventKey)) {
+              return;
+            }
+
+            const eventHandler = (...data: unknown[]) => event.sender.send(eventKey, ...data);
+
+            registryInstance.addListener(type, eventHandler);
+            activeEventRegistry.set(eventKey, eventHandler);
           });
-        });
+          ipcMain.on(`event-remove-${classKey}`, (event, type) => {
+            const eventKey = `event-${classKey}-${type}`;
+            const eventHandler = activeEventRegistry.get(eventKey);
+
+            if (!eventHandler) {
+              return;
+            }
+
+            registryInstance.removeListener(type, eventHandler);
+            activeEventRegistry.delete(eventKey);
+          });
+        }
       }
     }
   }
@@ -159,25 +179,39 @@ export async function encodeFromFile(filePath: string): Promise<string> {
   if (!filePath) {
     throw new Error('filePath is required.');
   }
+
   let mediaType: string | boolean = mimeTypes.lookup(filePath);
+
   if (mediaType === false) {
     throw new Error('Media type unrecognized.');
-  } else if (typeof mediaType !== 'string') {
+  }
+
+  if (typeof mediaType !== 'string') {
     throw new Error('Media type is not string.');
   }
+
   const fileData = readFileSync(filePath);
-  mediaType = /\//.test(mediaType) ? mediaType : 'image/' + mediaType;
+
+  mediaType = /\//.test(mediaType) ? mediaType : `image/${mediaType}`;
+
   const dataBase64 = Buffer.isBuffer(fileData) ? fileData.toString('base64') : Buffer.from(fileData).toString('base64');
-  return 'data:' + mediaType + ';base64,' + dataBase64;
+
+  return `data:${mediaType};base64,${dataBase64}`;
 }
 
 export function getCapacitorElectronConfig(): CapacitorElectronConfig {
-  let capFileConfig: any = {};
+  let capFileConfig: Record<string, unknown> = {};
+
   if (existsSync(join(app.getAppPath(), 'build', 'capacitor.config.js'))) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     capFileConfig = require(join(app.getAppPath(), 'build', 'capacitor.config.js')).default;
   } else {
     capFileConfig = JSON.parse(readFileSync(join(app.getAppPath(), 'capacitor.config.json')).toString());
   }
-  if (capFileConfig.electron) config = deepMerge(config, [capFileConfig]);
-  return deepClone(config as Record<string, any>) as CapacitorElectronConfig;
+
+  if (capFileConfig.electron) {
+    config = deepMerge(config, [capFileConfig]);
+  }
+
+  return deepClone(config as Record<string, unknown>) as CapacitorElectronConfig;
 }

@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { CapacitorElectronConfig } from './definitions';
 declare class CapElectronEmitter extends EventEmitter {
 }
