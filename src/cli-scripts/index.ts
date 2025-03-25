@@ -5,6 +5,8 @@ import { doCopy } from './copy';
 import { doOpen } from './open';
 import { doUpdate } from './update';
 
+const isVerbose = !!process.env.VERBOSE;
+
 async function doUpdateTask() {
   return await runTask('Updating Electron plugins', async (taskInfoMessageProvider) => {
     return await doUpdate(taskInfoMessageProvider);
@@ -24,8 +26,8 @@ async function doCopyTask() {
 }
 
 async function doOpenTask() {
-  return await runTask('Opening Electron platform', async (taskInfoMessageProvider) => {
-    return await doOpen(taskInfoMessageProvider);
+  return await runTask('Opening Electron platform', async (taskInfoMessageProvider, context) => {
+    return await doOpen(taskInfoMessageProvider, { ...context, isVerbose });
   });
 }
 
@@ -60,4 +62,7 @@ async function doOpenTask() {
   } else {
     throw new Error(`Invalid script chosen: ${scriptToRun}`);
   }
-})();
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

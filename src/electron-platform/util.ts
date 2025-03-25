@@ -85,6 +85,8 @@ export function deepClone<T>(object: Record<string, T>): Record<string, T> {
   return JSON.parse(JSON.stringify(object));
 }
 
+const log = (message: string) => console.log(`[${new Date().toISOString()}] ${message}`);
+
 const pluginInstanceRegistry: { [pluginClassName: string]: { [functionName: string]: any } } = {};
 const activeEventRegistry = new Map<string, () => void>();
 
@@ -97,18 +99,16 @@ export function setupCapacitorElectronPlugins(): void {
     }
   );
 
-  console.log('in setupCapacitorElectronPlugins');
   const rtPluginsPath = join(app.getAppPath(), 'build', 'src', 'rt', 'electron-plugins.js');
   const plugins: {
     [pluginName: string]: { [className: string]: any };
     // eslint-disable-next-line @typescript-eslint/no-var-requires
   } = require(rtPluginsPath);
 
-  console.log(plugins);
   for (const pluginKey of Object.keys(plugins)) {
-    console.log(`${pluginKey}`);
+    console.log(`- ${pluginKey}`);
     for (const classKey of Object.keys(plugins[pluginKey]).filter((className) => className !== 'default')) {
-      console.log(`-> ${classKey}`);
+      console.log(`\t-> ${classKey}`);
 
       if (!pluginInstanceRegistry[classKey]) {
         pluginInstanceRegistry[classKey] = new plugins[pluginKey][classKey](
@@ -124,10 +124,10 @@ export function setupCapacitorElectronPlugins(): void {
       );
 
       for (const functionName of functionList) {
-        console.log(`--> ${functionName}`);
+        console.log(`\t\t-> ${functionName}`);
 
         ipcMain.handle(`${classKey}-${functionName}`, (event, ...args) => {
-          console.log(`called ipcMain.handle: ${classKey}-${functionName}`);
+          log(`Called: ${classKey}-${functionName}`);
           const pluginRef = pluginInstanceRegistry[classKey];
           const callContext: CallContext = {
             senderFrame: event.senderFrame,
@@ -157,6 +157,7 @@ export function setupCapacitorElectronPlugins(): void {
 
             registryInstance.addListener(type, eventHandler);
             activeEventRegistry.set(eventKey, eventHandler);
+            log(`Added event listener: ${eventKey}`);
           });
           ipcMain.on(`event-remove-${classKey}`, (event, type) => {
             const eventKey = `event-${classKey}-${type}`;
@@ -168,11 +169,14 @@ export function setupCapacitorElectronPlugins(): void {
 
             registryInstance.removeListener(type, eventHandler);
             activeEventRegistry.delete(eventKey);
+            log(`Removed event listener: ${eventKey}`);
           });
         }
       }
     }
   }
+
+  console.log('\n\n');
 }
 
 export async function encodeFromFile(filePath: string): Promise<string> {

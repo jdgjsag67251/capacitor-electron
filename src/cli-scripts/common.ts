@@ -2,15 +2,15 @@ import type { CapacitorConfig } from '@capacitor/cli';
 import chalk from 'chalk';
 import { exec } from 'child_process';
 import { createHash } from 'crypto';
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import type { Ora } from 'ora';
 import ora from 'ora';
 import { dirname, join, parse, resolve } from 'path';
 
-const enum PluginType {
-  Core,
-  Cordova,
-  Incompatible,
+enum PluginType {
+  Core = 0,
+  Cordova = 1,
+  Incompatible = 2,
 }
 interface PluginManifest {
   electron: {
@@ -145,15 +145,20 @@ export function readJSON(pathToUse: string): { [key: string]: any } {
   return JSON.parse(data);
 }
 
-export function runExec(command: string): Promise<string> {
+export function runExec(command: string, { withOutput = false }: { withOutput?: boolean } = {}): Promise<string> {
   return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
+    const child = exec(command, (error, stdout, stderr) => {
       if (error) {
         reject(stdout + stderr);
       } else {
         resolve(stdout);
       }
     });
+
+    if (withOutput) {
+      child.stdout?.pipe(process.stdout);
+      child.stderr?.pipe(process.stderr);
+    }
   });
 }
 
@@ -200,17 +205,24 @@ export function resolveElectronPlugin(plugin: Plugin): string | null {
   }
 }
 
-export type TaskInfoProvider = (messsage: string) => void;
+export type TaskInfoProvider = (message: string) => void;
+export type TaskInfoContext = { spinner: Ora };
 
-export async function runTask<T>(title: string, fn: (info: TaskInfoProvider) => Promise<T>): Promise<T> {
+export async function runTask<T>(
+  title: string,
+  fn: (info: TaskInfoProvider, context: TaskInfoContext) => Promise<T>
+): Promise<T> {
   let spinner: Ora = ora(title).start(`${title}`);
   try {
     spinner = spinner.start(`${title}: ${chalk.dim('start 🚀')}`);
     const start = process.hrtime();
-    const value = await fn((message: string) => {
-      spinner = spinner.info();
-      spinner = spinner.start(`${title}: ${chalk.dim(message)}`);
-    });
+    const value = await fn(
+      (message: string) => {
+        spinner = spinner.info();
+        spinner = spinner.start(`${title}: ${chalk.dim(message)}`);
+      },
+      { spinner }
+    );
     spinner = spinner.info();
     const elapsed = process.hrtime(start);
     spinner = spinner.succeed(`${title}: ${chalk.dim('completed in ' + formatHrTime(elapsed))}`);
