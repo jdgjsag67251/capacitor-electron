@@ -120,7 +120,7 @@ export function setupCapacitorElectronPlugins(): void {
       }
 
       const functionList = Object.getOwnPropertyNames(plugins[pluginKey][classKey].prototype).filter(
-        (v) => v !== 'constructor'
+        (v) => v !== 'constructor' && !v.startsWith('_')
       );
 
       for (const functionName of functionList) {
